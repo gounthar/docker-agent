@@ -30,7 +30,7 @@ We would use:
 
 ### Curl Command
 The curl command is used to make an HTTP GET request to the Red Hat Container Catalog API with the specified parameters. It fetches the JSON data containing the tags for the UBI9 images.
-Click on "Execute" to get a curl command such as:
+Within the Swagger RedHat UI, once you have entered the right data in the fields, click on "Execute" to get a curl command such as:
 
 ```sh
 curl -X 'GET' \
@@ -94,7 +94,13 @@ Therefore, we search for all values associated with the `"name"` key in the data
 regardless of their position:
 
 ```bash
-latest_tag=$(echo "$response" | jq -r '.data[].repositories[] | select(.tags[].name == "latest") | .tags[] | select(.name != "latest" and (.name | contains("-"))) | .name' | sort -u)
+latest_tag=$(echo "$response" | jq -r '
+  .data[].repositories[]                                   # Iterate through repositories
+  | select(.tags[].name == "latest")                 # Find repository containing "latest" tag
+  | .tags[]                                                      # Iterate through all tags
+  | select(.name != "latest" and (.name | contains("-"))) # Select non-latest tags containing "-"
+  | .name                                                      # Extract tag name
+' | sort -u)
 ``` 
 
 As you can see, we focus on the values that contain `-`, because we're only interested in the long-form tag name (`9.5-1732804088` and not `9.5`). We'll also keep only one instance of the tag, just in case the JSON would contain duplicates.
