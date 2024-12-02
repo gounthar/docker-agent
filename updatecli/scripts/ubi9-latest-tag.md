@@ -4,11 +4,6 @@
 
 The script fetches the latest tag from the Red Hat Container Catalog API for UBI9 images. It ensures that `jq` and `curl` are installed, fetches the tags, and processes them to find the unique tag.
 
-## API Endpoints
-
-The Swagger API endpoints for the Red Hat Container Catalog API are documented at:
-[https://catalog.redhat.com/api/containers/v1/ui/#/Repositories/graphql.images.get_images_by_repo](https://catalog.redhat.com/api/containers/v1/ui/#/Repositories/graphql.images.get_images_by_repo)
-
 ## API Description
 
 The Red Hat Container Catalog API, which provides the tag information, is described in the Swagger API documentation:
@@ -22,16 +17,16 @@ We would use:
 - `last_update_date[desc]` in the `sort_by` field
 
 ### Parameters
-* registry: `registry.access.redhat.com`  
-  * This specifies the registry from which we are fetching the images. In this case, it is the Red Hat Container Catalog.
-* repository: `ubi9`  
-  * This specifies the repository within the registry. Here, we are interested in the UBI9 (Universal Base Image 9) repository.
-* page_size: `100`  
-  * This sets the number of results to return per page. We set it to 100 to ensure we get a sufficient number of tags in one request.
-* page: `0`  
-  * This specifies the page number to fetch. We start with page 0 to get the first set of results.
-* sort_by: `last_update_date[desc]`  
-  * This sorts the results by the `last_update_date` field in descending order. This ensures that the most recently updated tags are listed first.
+- registry: `registry.access.redhat.com`  
+  - This specifies the registry from which we are fetching the images. In this case, it is the Red Hat Container Catalog.
+- repository: `ubi9`  
+  - This specifies the repository within the registry. Here, we are interested in the UBI9 (Universal Base Image 9) repository.
+- page_size: `100`  
+  - This sets the number of results to return per page. We set it to 100 to ensure we get a sufficient number of tags in one request.
+- page: `0`  
+  - This specifies the page number to fetch. We start with page 0 to get the first set of results.
+- sort_by: `last_update_date[desc]`  
+  - This sorts the results by the `last_update_date` field in descending order. This ensures that the most recently updated tags are listed first.
 
 ### Curl Command
 The curl command is used to make an HTTP GET request to the Red Hat Container Catalog API with the specified parameters. It fetches the JSON data containing the tags for the UBI9 images.
@@ -42,9 +37,9 @@ curl -X 'GET' \
   'https://catalog.redhat.com/api/containers/v1/repositories/registry/registry.access.redhat.com/repository/ubi9/images?page_size=100&page=0&sort_by=last_update_date%5Bdesc%5D' \
   -H 'accept: application/json'
 ``` 
-* `-X 'GET'`: Specifies the HTTP method to use, which is GET in this case.
-* `URL`: The URL constructed with the parameters to fetch the UBI9 image tags.
-* `-H 'accept: application/json'`: Sets the request header to accept JSON responses.
+- `-X 'GET'`: Specifies the HTTP method to use, which is GET in this case.
+- `URL`: The URL constructed with the parameters to fetch the UBI9 image tags.
+- `-H 'accept: application/json'`: Sets the request header to accept JSON responses.
 
 The result would then contain something like:
 
