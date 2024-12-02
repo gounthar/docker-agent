@@ -82,10 +82,10 @@ What lies in the value associated to the `"name"` key in the first data structur
 That's why in the script we are searching for all values associated to the `"name"` key in the data block where we found `"latest"`:
 
 ```bash
-latest_tag=$(echo "$response" | jq -r '.data[].repositories[] | select(.tags[].name == "latest") | .tags[] | select(.name != "latest") | .name')
+latest_tag=$(echo "$response" | jq -r '.data[].repositories[] | select(.tags[].name == "latest") | .tags[] | select(.name != "latest" and (.name | contains("-"))) | .name' | sort -u)
 ``` 
 
-Later on in the script, we'll focus on the values that contain `-`, because we're only interested in the long-form tag name (`9.5-1732804088` and not `9.5`). We'll also keep only one instance of the tag, just in case the JSON would contain duplicates.
+As you can see, we focus on the values that contain `-`, because we're only interested in the long-form tag name (`9.5-1732804088` and not `9.5`). We'll also keep only one instance of the tag, just in case the JSON would contain duplicates.
 
 ```bash
 unique_tag=$(echo "$latest_tag" | sort | uniq | grep -v latest | grep "-")
