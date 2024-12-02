@@ -26,7 +26,7 @@ if [ -z "$response" ] || [ "$response" == "null" ]; then
 fi
 
 # Parse the JSON response using jq to find the version associated with the "latest" tag
-latest_tag=$(echo "$response" | jq -r '.data[].repositories[] | select(.tags[].name == "latest") | .tags[] | select(.name != "latest") | .name')
+latest_tag=$(echo "$response" | jq -r '.data[].repositories[] | select(.tags[].name == "latest") | .tags[] | select(.name != "latest" and (.name | contains("-"))) | .name' | sort -u)
 
 # Check if the latest_tag is empty
 if [ -z "$latest_tag" ]; then
@@ -34,11 +34,8 @@ if [ -z "$latest_tag" ]; then
   exit 1
 fi
 
-# Sort and remove duplicates
-unique_tag=$(echo "$latest_tag" | sort | uniq | grep -v latest | grep "-")
-
 # Trim spaces
-unique_tag=$(echo "$unique_tag" | xargs)
+unique_tag=$(echo "$latest_tag" | xargs)
 
 # Output the latest version
 echo "$unique_tag"
