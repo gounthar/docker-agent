@@ -20,7 +20,7 @@ We would use:
 - registry: `registry.access.redhat.com`  
   - This specifies the registry from which we are fetching the images. In this case, it is the Red Hat Container Catalog.
 - repository: `ubi9`  
-  - This specifies the repository within the registry. Here, we are interested in the UBI9 (Universal Base Image 9) repository.
+  - This specifies the repository within the registry. Here, we are interested in the UBI9 (Universal Base Image 9) repository. Whenever there is a UBI10, we will then change `ubi9` to `ubi10`, if the API doesn't change by then.
 - page_size: `100`  
   - This sets the number of results to return per page. We set it to 100 to ensure we get a sufficient number of tags in one request.
 - page: `0`  
@@ -34,6 +34,11 @@ Click on "Execute" to get a curl command such as:
 
 ```sh
 curl -X 'GET' \
+  --fail \
+  --silent \
+  --show-error \
+  --retry 3 \
+  --retry-delay 2 \
   'https://catalog.redhat.com/api/containers/v1/repositories/registry/registry.access.redhat.com/repository/ubi9/images?page_size=100&page=0&sort_by=last_update_date%5Bdesc%5D' \
   -H 'accept: application/json'
 ``` 
@@ -79,14 +84,10 @@ If we look closely at the preceding sibling in the JSON file, we'll find somethi
 }
 ```
 What lies in the value associated to the `"name"` key in the first data structure is what we're looking for.
-That's why in the script we are searching for all values associated to the `"name"` key in the data block where we found `"latest"`:
+Up to now, we've seen this long-form version value appearing always before the `"latest"` value, but the order in which they information is supposed to appear is not documented, we are thus searching for all values associated to the `"name"` key in the data block where we found `"latest"`, wherever they may be in the data block:
 
 ```bash
 latest_tag=$(echo "$response" | jq -r '.data[].repositories[] | select(.tags[].name == "latest") | .tags[] | select(.name != "latest" and (.name | contains("-"))) | .name' | sort -u)
 ``` 
 
 As you can see, we focus on the values that contain `-`, because we're only interested in the long-form tag name (`9.5-1732804088` and not `9.5`). We'll also keep only one instance of the tag, just in case the JSON would contain duplicates.
-
-```bash
-unique_tag=$(echo "$latest_tag" | sort | uniq | grep -v latest | grep "-")
-```
