@@ -103,4 +103,4 @@ latest_tag=$(echo "$response" | jq -r '
 ' | sort -u)
 ``` 
 
-As you can see, we focus on the values that contain `-`, because we're only interested in the long-form tag name (`9.5-1732804088` and not `9.5`). We'll also keep only one instance of the tag, just in case the JSON would contain duplicates.
+As you can see, we focus on the values that contain `-` because we're only interested in the long-form tag name (`9.5-1732804088` and not `9.5`). We'll also keep only one instance of the tag, just in case the JSON would contain duplicates.
