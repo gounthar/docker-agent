@@ -29,7 +29,12 @@ if ! command -v jq >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
 fi
 
 # Fetch the tags using curl, for `ub9`, in the `registry.access.redhat.com`, sorted by last update date descending, and keeping only page 0.
-response=$(curl --silent --fail --location --connect-timeout 10 --max-time 30 --header 'accept: application/json' "$URL")
+# --fail: Fail silently on HTTP errors
+# --silent: Don't show progress meter or error messages
+# --show-error: Show error message if it fails
+# --retry 3: Retry failed requests up to 3 times
+# --retry-delay 2: Wait 2 seconds between retries
+response=$(curl --silent --fail --location --connect-timeout 10 --retry 3 --retry-delay 2 --max-time 30 --header 'accept: application/json' "$URL")
 
 # Check if the response is empty or null
 if [ -z "$response" ] || [ "$response" == "null" ]; then

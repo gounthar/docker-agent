@@ -20,7 +20,7 @@ We would use:
 - registry: `registry.access.redhat.com`  
   - This specifies the registry from which we are fetching the images. In this case, it is the Red Hat Container Catalog.
 - repository: `ubi9`  
-  - This specifies the repository within the registry. Here, we are interested in the UBI9 (Universal Base Image 9) repository. Whenever there is a UBI10, we will then change `ubi9` to `ubi10`, if the API doesn't change by then.
+  - This specifies the repository within the registry. Here, we are interested in the UBI9 (Universal Base Image 9) repository.
 - page_size: `100`  
   - This sets the number of results to return per page. We set it to 100 to ensure we get a sufficient number of tags in one request.
 - page: `0`  
@@ -45,6 +45,11 @@ curl -X 'GET' \
 - `-X 'GET'`: Specifies the HTTP method to use, which is GET in this case.
 - `URL`: The URL constructed with the parameters to fetch the UBI9 image tags.
 - `-H 'accept: application/json'`: Sets the request header to accept JSON responses.
+- `--fail`: Fail silently on HTTP errors
+- `--silent`: Don't show progress meter or error messages
+- `--show-error`: Show error message if it fails
+- `--retry 3`: Retry failed requests up to 3 times
+- `--retry-delay 2`: Wait 2 seconds between retries
 
 The result would then contain something like:
 
@@ -84,7 +89,9 @@ If we look closely at the preceding sibling in the JSON file, we'll find somethi
 }
 ```
 What lies in the value associated to the `"name"` key in the first data structure is what we're looking for.
-Up to now, we've seen this long-form version value appearing always before the `"latest"` value, but the order in which they information is supposed to appear is not documented, we are thus searching for all values associated to the `"name"` key in the data block where we found `"latest"`, wherever they may be in the data block:
+While the long-form version value typically appears before the `"latest"` value, the order is not documented.
+Therefore, we search for all values associated with the `"name"` key in the data block containing `"latest"`,
+regardless of their position:
 
 ```bash
 latest_tag=$(echo "$response" | jq -r '.data[].repositories[] | select(.tags[].name == "latest") | .tags[] | select(.name != "latest" and (.name | contains("-"))) | .name' | sort -u)
