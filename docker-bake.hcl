@@ -13,38 +13,9 @@ group "windows" {
   ]
 }
 
-group "linux-agent-only" {
-  targets = [
-    "agent_alpine_jdk17",
-    "agent_alpine_jdk21",
-    "agent_alpine_jdk25",
-    "agent_debian_jdk17",
-    "agent_debian_jdk21",
-    "agent_debian_jdk25",
-    "agent_rhel_ubi9_jdk17",
-    "agent_rhel_ubi9_jdk21",
-    "agent_rhel_ubi9_jdk25"
-  ]
-}
-
-group "linux-inbound-agent-only" {
-  targets = [
-    "inbound-agent_alpine_jdk17",
-    "inbound-agent_alpine_jdk21",
-    "inbound-agent_alpine_jdk25",
-    "inbound-agent_debian_jdk17",
-    "inbound-agent_debian_jdk21",
-    "inbound-agent_debian_jdk25",
-    "inbound-agent_rhel_ubi9_jdk17",
-    "inbound-agent_rhel_ubi9_jdk21",
-    "inbound-agent_rhel_ubi9_jdk25"
-  ]
-}
-
 group "linux-arm64" {
   targets = [
     "alpine_jdk21",
-    "alpine_jdk25",
     "debian",
     "rhel_ubi9"
   ]
@@ -74,11 +45,15 @@ variable "agent_types_to_build" {
 }
 
 variable "jdks_to_build" {
-  default = [17, 21, 25]
+  default = [17, 21]
 }
 
 variable "default_jdk" {
   default = 17
+}
+
+variable "jdks_in_preview" {
+  default = [25]
 }
 
 variable "JAVA17_VERSION" {
@@ -89,12 +64,8 @@ variable "JAVA21_VERSION" {
   default = "21.0.6_7"
 }
 
-variable "JAVA25_VERSION" {
-  default = "25+9-ea-beta"
-}
-
 variable "REMOTING_VERSION" {
-  default = "3283.v92c105e0f819"
+  default = "3301.v4363ddcca_4e7"
 }
 
 variable "REGISTRY" {
@@ -130,11 +101,11 @@ variable "ALPINE_SHORT_TAG" {
 }
 
 variable "DEBIAN_RELEASE" {
-  default = "bookworm-20250203"
+  default = "bookworm-20250407"
 }
 
 variable "UBI9_TAG" {
-  default = "9.5-1739751568"
+  default = "9.5-1744101466"
 }
 
 # Set this value to a specific Windows version to override Windows versions to build returned by windowsversions function
@@ -165,9 +136,7 @@ function "javaversion" {
   params = [jdk]
   result = (equal(17, jdk)
     ? "${JAVA17_VERSION}"
-  : (equal(21, jdk)
-    ? "${JAVA21_VERSION}"
-  : "${JAVA25_VERSION}"))
+  : "${JAVA21_VERSION}")
 }
 
 ## Specific functions
@@ -176,9 +145,7 @@ function "alpine_platforms" {
   params = [jdk]
   result = (equal(21, jdk)
     ? ["linux/amd64", "linux/arm64"]
-  : (equal(25, jdk)
-    ? ["linux/amd64", "linux/arm64"]
-  : ["linux/amd64"]))
+  : ["linux/amd64"])
 }
 
 # Return an array of Debian platforms to use depending on the jdk passed as parameter
@@ -186,9 +153,7 @@ function "debian_platforms" {
   params = [jdk]
   result = (equal(17, jdk)
     ? ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/arm/v7"]
-  : (equal(21, jdk)
-    ? ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/s390x"]
-  : ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/s390x"]))
+  : ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/s390x"])
 }
 
 # Return array of Windows version(s) to build
@@ -229,6 +194,77 @@ function "rhel_ubi9_platforms" {
   result = ["linux/amd64", "linux/arm64", "linux/ppc64le"]
 }
 
+# Return the distribution followed by a dash if it is not the default distribution
+function distribution_prefix {
+  params = [distribution]
+  result = (equal("debian", distribution)
+    ? ""
+  : "${distribution}-")
+}
+
+# Return a dash followed by the distribution if it is not the default distribution
+function distribution_suffix {
+  params = [distribution]
+  result = (equal("debian", distribution)
+    ? ""
+  : "-${distribution}")
+}
+
+# Return the official name of the default distribution
+function distribution_name {
+  params = [distribution]
+  result = (equal("debian", distribution)
+    ? "bookworm"
+  : distribution)
+}
+
+# Return the tag suffixed by "-preview" if the jdk passed as parameter is in the jdks_in_preview list
+function preview_tag {
+  params = [jdk]
+  result = (contains(jdks_in_preview, jdk)
+    ? "${jdk}-preview"
+  : jdk)
+}
+
+# Return an array of tags depending on the agent type, the jdk and the Linux distribution passed as parameters
+function "linux_tags" {
+  params = [type, jdk, distribution]
+  result = [
+    ## All
+    # If there is a tag, add versioned tag suffixed by the jdk
+    equal(ON_TAG, "true") ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}${distribution_suffix(distribution)}-jdk${preview_tag(jdk)}" : "",
+
+    # If there is a tag and if the jdk is the default one, add versioned short tag
+    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}${distribution_suffix(distribution)}" : "") : "",
+
+    # If the jdk is the default one, add distribution and latest short tags
+    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${distribution_name(distribution)}" : "",
+    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:latest${distribution_suffix(distribution)}" : "",
+    # Needed for the ":latest-bookworm" case. For other distributions, result in the same tag as above (not an issue, deduplicated at the end)
+    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:latest-${distribution_name(distribution)}" : "",
+
+    # Tags always added
+    "${REGISTRY}/${orgrepo(type)}:${distribution_name(distribution)}-jdk${preview_tag(jdk)}",
+    "${REGISTRY}/${orgrepo(type)}:latest-${distribution_name(distribution)}-jdk${preview_tag(jdk)}",
+    # ":jdkN" and ":latest-jdkN" short tags for the default distribution. For other distributions, result in the tags above (not an issue, deduplicated at the end)
+    "${REGISTRY}/${orgrepo(type)}:${distribution_prefix(distribution)}jdk${preview_tag(jdk)}",
+    "${REGISTRY}/${orgrepo(type)}:latest-${distribution_prefix(distribution)}jdk${preview_tag(jdk)}",
+  ]
+}
+
+# Return an array of tags depending on the agent type, the jdk and the flavor and version of Windows passed as parameters
+function "windows_tags" {
+  params = [type, jdk, flavor_and_version]
+  result = [
+    # If there is a tag, add versioned tag containing the jdk
+    equal(ON_TAG, "true") ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-jdk${preview_tag(jdk)}-${flavor_and_version}" : "",
+    # If there is a tag and if the jdk is the default one, add versioned and short tags
+    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-${flavor_and_version}" : "") : "",
+    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${flavor_and_version}" : "") : "",
+    "${REGISTRY}/${orgrepo(type)}:jdk${preview_tag(jdk)}-${flavor_and_version}",
+  ]
+}
+
 target "alpine" {
   matrix = {
     type = agent_types_to_build
@@ -243,23 +279,7 @@ target "alpine" {
     VERSION      = REMOTING_VERSION
     JAVA_VERSION = "${javaversion(jdk)}"
   }
-  tags = [
-    # If there is a tag, add versioned tags suffixed by the jdk
-    equal(ON_TAG, "true") ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-alpine-jdk${jdk}" : "",
-    equal(ON_TAG, "true") ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-alpine${ALPINE_SHORT_TAG}-jdk${jdk}" : "",
-    # If there is a tag and if the jdk is the default one, add Alpine short tags
-    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-alpine" : "") : "",
-    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-alpine${ALPINE_SHORT_TAG}" : "") : "",
-    # If the jdk is the default one, add Alpine short tags
-    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:alpine" : "",
-    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:alpine${ALPINE_SHORT_TAG}" : "",
-    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:latest-alpine" : "",
-    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:latest-alpine${ALPINE_SHORT_TAG}" : "",
-    "${REGISTRY}/${orgrepo(type)}:alpine-jdk${jdk}",
-    "${REGISTRY}/${orgrepo(type)}:alpine${ALPINE_SHORT_TAG}-jdk${jdk}",
-    "${REGISTRY}/${orgrepo(type)}:latest-alpine-jdk${jdk}",
-    "${REGISTRY}/${orgrepo(type)}:latest-alpine${ALPINE_SHORT_TAG}-jdk${jdk}",
-  ]
+  tags      = concat(linux_tags(type, jdk, "alpine"), linux_tags(type, jdk, "alpine${ALPINE_SHORT_TAG}"))
   platforms = alpine_platforms(jdk)
 }
 
@@ -277,27 +297,14 @@ target "debian" {
     DEBIAN_RELEASE = DEBIAN_RELEASE
     JAVA_VERSION   = "${javaversion(jdk)}"
   }
-  tags = [
-    # If there is a tag, add versioned tag suffixed by the jdk
-    equal(ON_TAG, "true") ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-jdk${jdk}" : "",
-    # If there is a tag and if the jdk is the default one, add versioned short tag
-    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}" : "") : "",
-    # If the jdk is the default one, add Debian and latest short tags
-    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:bookworm" : "",
-    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:latest" : "",
-    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:latest-bookworm" : "",
-    "${REGISTRY}/${orgrepo(type)}:bookworm-jdk${jdk}",
-    "${REGISTRY}/${orgrepo(type)}:jdk${jdk}",
-    "${REGISTRY}/${orgrepo(type)}:latest-bookworm-jdk${jdk}",
-    "${REGISTRY}/${orgrepo(type)}:latest-jdk${jdk}",
-  ]
+  tags      = linux_tags(type, jdk, "debian")
   platforms = debian_platforms(jdk)
 }
 
 target "rhel_ubi9" {
   matrix = {
     type = agent_types_to_build
-    jdk  = [17, 21, 25]
+    jdk  = jdks_to_build
   }
   name       = "${type}_rhel_ubi9_jdk${jdk}"
   target     = type
@@ -308,17 +315,7 @@ target "rhel_ubi9" {
     VERSION      = REMOTING_VERSION
     JAVA_VERSION = "${javaversion(jdk)}"
   }
-  tags = [
-    # If there is a tag, add versioned tag suffixed by the jdk
-    equal(ON_TAG, "true") ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-rhel-ubi9-jdk${jdk}" : "",
-    # If there is a tag and if the jdk is the default one, add versioned short tag
-    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-rhel-ubi9" : "") : "",
-    # If the jdk is the default one, add rhel and latest short tags
-    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:rhel-ubi9" : "",
-    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:latest-rhel-ubi9" : "",
-    "${REGISTRY}/${orgrepo(type)}:rhel-ubi9-jdk${jdk}",
-    "${REGISTRY}/${orgrepo(type)}:latest-rhel-ubi9-jdk${jdk}",
-  ]
+  tags      = linux_tags(type, jdk, "rhel-ubi9")
   platforms = rhel_ubi9_platforms(jdk)
 }
 
@@ -338,15 +335,8 @@ target "nanoserver" {
     VERSION               = REMOTING_VERSION
     WINDOWS_VERSION_TAG   = windows_version
   }
-  target = type
-  tags = [
-    # If there is a tag, add versioned tag containing the jdk
-    equal(ON_TAG, "true") ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-jdk${jdk}-nanoserver-${windows_version}" : "",
-    # If there is a tag and if the jdk is the default one, add versioned and short tags
-    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-nanoserver-${windows_version}" : "") : "",
-    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:nanoserver-${windows_version}" : "") : "",
-    "${REGISTRY}/${orgrepo(type)}:jdk${jdk}-nanoserver-${windows_version}",
-  ]
+  target    = type
+  tags      = windows_tags(type, jdk, "nanoserver-${windows_version}")
   platforms = ["windows/amd64"]
 }
 
@@ -366,14 +356,7 @@ target "windowsservercore" {
     VERSION               = REMOTING_VERSION
     WINDOWS_VERSION_TAG   = windows_version
   }
-  target = type
-  tags = [
-    # If there is a tag, add versioned tag containing the jdk
-    equal(ON_TAG, "true") ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-jdk${jdk}-windowsservercore-${windows_version}" : "",
-    # If there is a tag and if the jdk is the default one, add versioned and short tags
-    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-windowsservercore-${windows_version}" : "") : "",
-    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:windowsservercore-${windows_version}" : "") : "",
-    "${REGISTRY}/${orgrepo(type)}:jdk${jdk}-windowsservercore-${windows_version}",
-  ]
+  target    = type
+  tags      = windows_tags(type, jdk, "windowsservercore-${windows_version}")
   platforms = ["windows/amd64"]
 }

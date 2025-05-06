@@ -56,7 +56,7 @@ COPY --from=pwsh-source $PSHOME $PSHOME
 SHELL ["pwsh.exe", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
 USER ContainerAdministrator
 
-ARG GIT_VERSION=2.48.1
+ARG GIT_VERSION=2.49.0
 ARG GIT_PATCH_VERSION=1
 RUN [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 ; `
     # The patch "windows.1" always have a different URL than the subsequent patch (ZIP filename is different)
@@ -100,7 +100,7 @@ ARG AGENT_WORKDIR=${AGENT_ROOT}/Work
 ENV AGENT_WORKDIR=${AGENT_WORKDIR}
 
 # Get the Agent from the Jenkins Artifacts Repository
-ARG VERSION=3283.v92c105e0f819
+ARG VERSION=3301.v4363ddcca_4e7
 RUN [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 ; `
     Invoke-WebRequest $('https://repo.jenkins-ci.org/public/org/jenkins-ci/main/remoting/{0}/remoting-{0}.jar' -f $env:VERSION) -OutFile $(Join-Path C:/ProgramData/Jenkins $env:AGENT_FILENAME) -UseBasicParsing ; `
     Invoke-WebRequest $('https://repo.jenkins-ci.org/public/org/jenkins-ci/main/remoting/{0}/remoting-{0}.jar.sha1' -f $env:VERSION) -OutFile (Join-Path C:/ProgramData/Jenkins $env:AGENT_HASH_FILENAME) -UseBasicParsing ; `
@@ -112,7 +112,8 @@ USER $user
 RUN New-Item -Type Directory $('{0}/.jenkins' -f $env:AGENT_ROOT) | Out-Null ; `
     New-Item -Type Directory $env:AGENT_WORKDIR | Out-Null
 
-RUN git config --global core.longpaths true
+RUN git config --system core.longpaths true ; `
+    Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -type DWord -Value 1
 
 VOLUME "${AGENT_ROOT}"/.jenkins
 VOLUME "${AGENT_WORKDIR}"
