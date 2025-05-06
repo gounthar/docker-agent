@@ -145,7 +145,7 @@ $ make show
       "context": ".",
       "dockerfile": "alpine/Dockerfile",
       "args": {
-        "ALPINE_TAG": "3.20.2",
+        "ALPINE_TAG": "3.21.3",
         "JAVA_VERSION": "17",
         "VERSION": "3309.v27b_9314fd1a_4"
       },
