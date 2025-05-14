@@ -45,7 +45,7 @@ variable "agent_types_to_build" {
 }
 
 variable "jdks_to_build" {
-  default = [17, 21]
+  default = [17, 21, 25]
 }
 
 variable "default_jdk" {
@@ -62,6 +62,10 @@ variable "JAVA17_VERSION" {
 
 variable "JAVA21_VERSION" {
   default = "21.0.7_6"
+}
+
+variable "JAVA25_VERSION" {
+  default = "25+9-ea-beta"
 }
 
 variable "REMOTING_VERSION" {
@@ -105,7 +109,7 @@ variable "DEBIAN_RELEASE" {
 }
 
 variable "UBI9_TAG" {
-  default = "9.5-1745848351"
+  default = "9.6-1745489786"
 }
 
 # Set this value to a specific Windows version to override Windows versions to build returned by windowsversions function
@@ -136,14 +140,18 @@ function "javaversion" {
   params = [jdk]
   result = (equal(17, jdk)
     ? "${JAVA17_VERSION}"
-  : "${JAVA21_VERSION}")
+    : (equal(21, jdk)
+      ? "${JAVA21_VERSION}"
+      : (equal(25, jdk)
+        ? "${JAVA25_VERSION}"
+        : "Unsupported JDK version")))
 }
 
 ## Specific functions
 # Return an array of Alpine platforms to use depending on the jdk passed as parameter
 function "alpine_platforms" {
   params = [jdk]
-  result = (equal(21, jdk)
+  result = (equal(21, jdk) || equal(25, jdk)
     ? ["linux/amd64", "linux/arm64"]
   : ["linux/amd64"])
 }
@@ -153,7 +161,7 @@ function "debian_platforms" {
   params = [jdk]
   result = (equal(17, jdk)
     ? ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/arm/v7"]
-  : ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/s390x"])
+    : ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/s390x"])
 }
 
 # Return array of Windows version(s) to build

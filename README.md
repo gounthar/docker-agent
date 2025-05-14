@@ -32,16 +32,22 @@ If you want to see the target images (matching your current architecture) that w
 $ make list
 agent_alpine_jdk17
 agent_alpine_jdk21
+agent_alpine_jdk25
 agent_debian_jdk17
 agent_debian_jdk21
+agent_debian_jdk25
 agent_rhel_ubi9_jdk17
 agent_rhel_ubi9_jdk21
+agent_rhel_ubi9_jdk25
 inbound-agent_alpine_jdk17
 inbound-agent_alpine_jdk21
+inbound-agent_alpine_jdk25
 inbound-agent_debian_jdk17
 inbound-agent_debian_jdk21
+inbound-agent_debian_jdk25
 inbound-agent_rhel_ubi9_jdk17
 inbound-agent_rhel_ubi9_jdk21
+inbound-agent_rhel_ubi9_jdk25
 ```
 
 #### Building a specific image
@@ -107,16 +113,20 @@ $ make show
       "targets": [
         "agent_alpine_jdk17",
         "agent_alpine_jdk21",
+        "agent_alpine_jdk25",
         "inbound-agent_alpine_jdk17",
-        "inbound-agent_alpine_jdk21"
+        "inbound-agent_alpine_jdk21",
+        "inbound-agent_alpine_jdk25"
       ]
     },
     "debian": {
       "targets": [
         "agent_debian_jdk17",
         "agent_debian_jdk21",
+        "agent_debian_jdk25",
         "inbound-agent_debian_jdk17",
-        "inbound-agent_debian_jdk21"
+        "inbound-agent_debian_jdk21",
+        "inbound-agent_debian_jdk25"
       ]
     },
     "default": {
@@ -135,8 +145,10 @@ $ make show
       "targets": [
         "agent_rhel_ubi9_jdk17",
         "agent_rhel_ubi9_jdk21",
+        "agent_rhel_ubi9_jdk25",
         "inbound-agent_rhel_ubi9_jdk17",
-        "inbound-agent_rhel_ubi9_jdk21"
+        "inbound-agent_rhel_ubi9_jdk21",
+        "inbound-agent_rhel_ubi9_jdk25"
       ]
     }
   },
