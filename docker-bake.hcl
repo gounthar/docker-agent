@@ -45,6 +45,10 @@ variable "agent_types_to_build" {
 }
 
 variable "jdks_to_build" {
+  default = [17, 21, 25]
+}
+
+variable "windows_jdks_to_build" {
   default = [17, 21]
 }
 
@@ -62,6 +66,10 @@ variable "JAVA17_VERSION" {
 
 variable "JAVA21_VERSION" {
   default = "21.0.7_6"
+}
+
+variable "JAVA25_VERSION" {
+  default = "25+9-ea-beta"
 }
 
 variable "REMOTING_VERSION" {
@@ -101,7 +109,7 @@ variable "ALPINE_SHORT_TAG" {
 }
 
 variable "DEBIAN_RELEASE" {
-  default = "bookworm-20250428"
+  default = "bookworm-20250520"
 }
 
 variable "UBI9_TAG" {
@@ -116,6 +124,14 @@ variable "WINDOWS_VERSION_OVERRIDE" {
 # Set this value to a specific agent type to override agent type to build returned by windowsagenttypes function
 variable "WINDOWS_AGENT_TYPE_OVERRIDE" {
   default = ""
+}
+
+variable "jdk_versions" {
+  default = {
+    17 = JAVA17_VERSION
+    21 = JAVA21_VERSION
+    25 = JAVA25_VERSION
+  }
 }
 
 ## Common functions
@@ -134,18 +150,16 @@ function "is_default_jdk" {
 # Return the complete Java version corresponding to the jdk passed as parameter
 function "javaversion" {
   params = [jdk]
-  result = (equal(17, jdk)
-    ? "${JAVA17_VERSION}"
-  : "${JAVA21_VERSION}")
+  result = lookup(jdk_versions, jdk, "Unsupported JDK version")
 }
 
 ## Specific functions
 # Return an array of Alpine platforms to use depending on the jdk passed as parameter
 function "alpine_platforms" {
   params = [jdk]
-  result = (equal(21, jdk)
-    ? ["linux/amd64", "linux/arm64"]
-  : ["linux/amd64"])
+  result = (equal(17, jdk)
+    ? ["linux/amd64"]
+  : ["linux/amd64", "linux/arm64"])
 }
 
 # Return an array of Debian platforms to use depending on the jdk passed as parameter
@@ -153,7 +167,7 @@ function "debian_platforms" {
   params = [jdk]
   result = (equal(17, jdk)
     ? ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/arm/v7"]
-  : ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/s390x"])
+    : ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/s390x"])
 }
 
 # Return array of Windows version(s) to build
@@ -322,7 +336,7 @@ target "rhel_ubi9" {
 target "nanoserver" {
   matrix = {
     type            = windowsagenttypes(WINDOWS_AGENT_TYPE_OVERRIDE)
-    jdk             = jdks_to_build
+    jdk             = windows_jdks_to_build
     windows_version = windowsversions("nanoserver")
   }
   name       = "${type}_nanoserver-${windows_version}_jdk${jdk}"
@@ -343,7 +357,7 @@ target "nanoserver" {
 target "windowsservercore" {
   matrix = {
     type            = windowsagenttypes(WINDOWS_AGENT_TYPE_OVERRIDE)
-    jdk             = jdks_to_build
+    jdk             = windows_jdks_to_build
     windows_version = windowsversions("windowsservercore")
   }
   name       = "${type}_windowsservercore-${windows_version}_jdk${jdk}"
