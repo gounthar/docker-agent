@@ -6,108 +6,154 @@ properties([
     pipelineTriggers([cron(cronExpr)]),
 ])
 
-def agentSelector(String imageType) {
-    // Linux agent
-    if (imageType == 'linux') {
-        // This function is defined in the jenkins-infra/pipeline-library
-        if (infra.isTrusted()) {
-            return 'linux'
-        } else {
-            // Need Docker and a LOT of memory for faster builds (due to multi archs) or fallback to linux (trusted.ci)
-            return 'docker-highmem'
-        }
+def agentSelector(String imageType, retryCounter) {
+    def platform
+    switch (imageType) {
+        // nanoserver-ltsc2019 and windowservercore-ltsc2019
+        case ~/.*2019/:
+            platform = 'windows-2019'
+            break
+
+        // nanoserver-ltsc2022 and windowservercore-ltsc2022
+        case ~/.*2022/:
+            platform = 'windows-2022'
+            break
+
+        // nanoserver-ltsc2025 and windowservercore-ltsc2025
+        case ~/.*2025/:
+            platform = 'windows-2025'
+            break
+
+        // Linux
+        default:
+            // Need Docker and a LOT of memory for faster builds (due to multi archs)
+            platform = 'docker-highmem'
+            break
     }
-    // Windows Server Core 2022 agent
-    if (imageType.contains('2022')) {
-        return 'windows-2022'
-    }
-    // Windows Server Core 2019 agent (for nanoserver 1809 & ltsc2019 and for windowservercore ltsc2019)
-    return 'windows-2019'
+
+    // Defined in https://github.com/jenkins-infra/pipeline-library/blob/master/vars/infra.groovy
+    return infra.getBuildAgentLabel([
+        useContainerAgent: false,
+        platform: platform,
+        spotRetryCounter: retryCounter
+    ])
 }
 
-// Ref. https://github.com/jenkins-infra/pipeline-library/pull/917
-def spotAgentSelector(String agentLabel, int counter) {
-    // This function is defined in the jenkins-infra/pipeline-library
-    if (infra.isTrusted()) {
-        // Return early if on trusted (no spot agent)
-        return agentLabel
+// Defaul values
+def tagWithOneDashExist = false
+def remotingVersion = '3355.v388858a_47b_33'
+def buildNumber = env.BUILD_NUMBER
+// Values on tag containing the remoting version and build number
+if (env.TAG_NAME) {
+    def tagItems = env.TAG_NAME.split('-')
+    if (tagItems.length == 2) {
+        tagWithOneDashExist = true
+        remotingVersion = tagItems[0]
+        buildNumber = tagItems[1]
     }
-
-    if (counter > 1) {
-        return agentLabel + ' && nonspot'
-    }
-
-    return agentLabel + ' && spot'
 }
 
 // Specify parallel stages
+// Linux: bake group(s) or target(s)
+// Windows: flavor and version to build
 def parallelStages = [failFast: false]
 [
     'linux',
-    'nanoserver-1809',
     'nanoserver-ltsc2019',
     'nanoserver-ltsc2022',
-    'windowsservercore-1809',
     'windowsservercore-ltsc2019',
     'windowsservercore-ltsc2022'
 ].each { imageType ->
     parallelStages[imageType] = {
-        withEnv(["IMAGE_TYPE=${imageType}", "REGISTRY_ORG=${infra.isTrusted() ? 'jenkins' : 'jenkins4eval'}"]) {
+        // Only bake targets can be specified with build-%, test-% and publish-% make targets
+        def makeTargetSuffix= (imageType.startsWith('agent_') || imageType.startsWith('inbound-agent_')) ? "-${imageType}" : ''
+        withEnv([
+            "ON_TAG=${tagWithOneDashExist}",
+            "REMOTING_VERSION=${remotingVersion}",
+            "BUILD_NUMBER=${buildNumber}",
+            "IMAGE_TYPE=${imageType}",
+            "REGISTRY_ORG=${infra.isTrusted() ? 'jenkins' : 'jenkins4eval'}",
+            "MAKE_TARGET_SUFFIX=${makeTargetSuffix}"
+        ]) {
             int retryCounter = 0
             retry(count: 2, conditions: [agent(), nonresumable()]) {
                 // Use local variable to manage concurrency and increment BEFORE spinning up any agent
-                final String resolvedAgentLabel = spotAgentSelector(agentSelector(imageType), retryCounter)
+                final String resolvedAgentLabel = agentSelector(imageType, retryCounter)
                 retryCounter++
                 node(resolvedAgentLabel) {
                     timeout(time: 60, unit: 'MINUTES') {
                         checkout scm
-                        if (imageType == "linux") {
-                            stage('Prepare Docker') {
+                        stage("Prepare Docker on ${resolvedAgentLabel}") {
+                            if (isUnix()) {
                                 sh 'make docker-init'
+                            } else {
+                                powershell './make.ps1 docker-init'
+                                archiveArtifacts artifacts: 'build-windows_*.yaml', allowEmptyArchive: true
                             }
                         }
-                        // This function is defined in the jenkins-infra/pipeline-library
-                        if (infra.isTrusted()) {
-                            // trusted.ci.jenkins.io builds (e.g. publication to DockerHub)
-                            stage('Deploy to DockerHub') {
-                                String[] tagItems = env.TAG_NAME.split('-')
-                                if(tagItems.length == 2) {
-                                    withEnv([
-                                        "ON_TAG=true",
-                                        "REMOTING_VERSION=${tagItems[0]}",
-                                        "BUILD_NUMBER=${tagItems[1]}",
-                                    ]) {
-                                        // This function is defined in the jenkins-infra/pipeline-library
-                                        infra.withDockerCredentials {
-                                            if (isUnix()) {
-                                                sh 'make publish'
-                                            } else {
-                                                powershell '& ./build.ps1 publish'
-                                            }
-                                        }
-                                    }
+
+                        if (isUnix()) {
+                            stage('Checks') {
+                                sh 'make hadolint'
+                                sh 'make shellcheck'
+                            }
+                        }
+
+                        // No single arch build or test on trusted.ci.jenkins.io
+                        if (!infra.isTrusted()) {
+                            // Build current arch for Linux images
+                            stage('Build current arch') {
+                                if (isUnix()) {
+                                    sh 'make "build${MAKE_TARGET_SUFFIX}"'
                                 } else {
-                                    error("The deployment to Docker Hub failed because the tag doesn't contain any '-'.")
+                                    // No multiarch Windows images
+                                    powershell './make.ps1 build'
                                 }
                             }
-                        } else {
-                            stage('Build and Test') {
-                                // ci.jenkins.io builds (e.g. no publication)
+
+                            stage('Test') {
                                 if (isUnix()) {
-                                    sh './build.sh'
-                                    sh './build.sh test'
+                                    sh 'make "test${MAKE_TARGET_SUFFIX}"'
                                 } else {
-                                    powershell '& ./build.ps1 test'
-                                    archiveArtifacts artifacts: 'build-windows_*.yaml', allowEmptyArchive: true
+                                    powershell './make.ps1 test'
                                 }
                                 junit(allowEmptyResults: true, keepLongStdio: true, testResults: 'target/**/junit-results*.xml')
                             }
-                            // If the tests are passing for Linux AMD64, then we can build all the CPU architectures
-                            if (isUnix()) {
-                                stage('Multi-Arch Build') {
+                            archiveArtifacts artifacts: 'target/build-result-metadata_*.json', allowEmptyArchive: true
+                        }
 
-                                    sh 'make every-build'
+                        // If the tests are passing for Linux AMD64 or if we're on trusted.ci.jenkins.io
+                        // then we build all the CPU architectures
+                        stage('Build multiarch') {
+                            if (isUnix()) {
+                                sh 'make "multiarchbuild${MAKE_TARGET_SUFFIX}"'
+                            } else {
+                                // No multiarch images for Windows, (re)building them here on both controllers
+                                powershell './make.ps1 build'
+                            }
+                            archiveArtifacts artifacts: 'target/build-result-metadata_*.json', allowEmptyArchive: true
+                        }
+
+                        // trusted.ci.jenkins.io builds (e.g. publication to DockerHub)
+                        if (infra.isTrusted()) {
+                            stage('Deploy to DockerHub') {
+                                if (!tagWithOneDashExist) {
+                                    error("The deployment to Docker Hub failed because the tag doesn't contain any '-'.")
                                 }
+                                // This function is defined in the jenkins-infra/pipeline-library
+                                infra.withDockerCredentials {
+                                    if (isUnix()) {
+                                        if (imageType != 'linux') {
+                                            sh 'make "publish${MAKE_TARGET_SUFFIX}"'
+                                        } else {
+                                            // Batch Linux images publication by distribution to avoid 429 rate limit errors from Docker Hub
+                                            sh 'make listgroup-linux | xargs -I {} make "publish-{}"'
+                                        }
+                                    } else {
+                                        powershell './make.ps1 publish'
+                                    }
+                                }
+                                archiveArtifacts artifacts: 'target/build-result-metadata_*.json', allowEmptyArchive: true
                             }
                         }
                     }

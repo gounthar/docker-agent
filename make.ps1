@@ -1,10 +1,10 @@
 [CmdletBinding()]
 Param(
     [Parameter(Position = 1)]
-    # Default build.ps1 target
+    # Default make.ps1 target
     [String] $Target = 'build',
     # Remoting version to include
-    [String] $RemotingVersion = '3341.v0766d82b_dec0',
+    [String] $RemotingVersion = '3355.v388858a_47b_33',
     # Type of agent ("agent" or "inbound-agent")
     [String] $AgentType = '',
     # Windows flavor and windows version to build
@@ -129,8 +129,6 @@ function Initialize-DockerComposeFile {
         [String] $DockerComposeFile
     )
 
-    $baseDockerBakeCmd = 'docker buildx bake --progress=plain --file=docker-bake.hcl'
-
     $items = $ImageType.Split('-')
     $windowsFlavor = $items[0]
     $windowsVersion = $items[1]
@@ -146,22 +144,22 @@ function Initialize-DockerComposeFile {
     # For each target name as service key, return a map consisting of:
     # - 'image' set to the first tag value
     # - 'build' set to the content of the bake target
-    $yqMainQuery = '''.target[]' + `
-        ' | del(.output)' + `
-        ' | {(. | key): {\"image\": .tags[0], \"build\": .}}'''
+    $yqMainQuery = '.target[] | del(.output) | {(. | key): {"image": .tags[0], "build": .}}'
     # Encapsulate under a top level 'services' map
-    $yqServicesQuery = '''{\"services\": .}'''
+    $yqServicesQuery = '{"services": .}'
+
+    if ($PSVersionTable.PSVersion.Major -eq 5) {
+        $yqMainQuery = $yqMainQuery -replace '"', '\"'
+        $yqServicesQuery = $yqServicesQuery -replace '"', '\"'
+    }
 
     # - Use docker buildx bake to output image definitions from the "<windowsFlavor>" bake target
     # - Convert with yq to the format expected by docker compose
     # - Store the result in the docker compose file
-    $generateDockerComposeFileCmd = ' {0} {1} --print' -f $baseDockerBakeCmd, $windowsFlavor + `
-        ' | yq --prettyPrint {0} | yq {1}' -f $yqMainQuery, $yqServicesQuery + `
-        ' | Out-File -FilePath {0}' -f $DockerComposeFile
-
-    Write-Host "= PREPARE: Docker compose file generation command`n$generateDockerComposeFileCmd"
-
-    Invoke-Expression $generateDockerComposeFileCmd
+    docker buildx bake --progress=quiet --file=docker-bake.hcl $windowsFlavor --print |
+        yq --prettyPrint $yqMainQuery |
+        yq $yqServicesQuery |
+        Out-File -FilePath $DockerComposeFile
 
     # Remove override
     Remove-Item env:\WINDOWS_VERSION_OVERRIDE
@@ -173,6 +171,11 @@ Test-CommandExists 'docker-compose'
 Test-CommandExists 'docker buildx'
 Test-CommandExists 'yq'
 
+if ($Target -eq 'docker-init') {
+    Write-Host '= INIT: docker info below'
+    docker info
+}
+
 foreach($agentType in $AgentTypes) {
     $dockerComposeFile = 'build-windows_{0}_{1}.yaml' -f $AgentType, $ImageType
     $baseDockerCmd = 'docker-compose --file={0}' -f $dockerComposeFile
@@ -180,27 +183,29 @@ foreach($agentType in $AgentTypes) {
 
     # Generate the docker compose file if it doesn't exists or if the parameter OverwriteDockerComposeFile is set
     if ((Test-Path $dockerComposeFile) -and -not $OverwriteDockerComposeFile) {
-        Write-Host "= PREPARE: The docker compose file '$dockerComposeFile' containing the image definitions already exists."
+        Write-Host "= PREPARE: The docker compose file '$dockerComposeFile' containing the $agentType image definitions already exists."
     } else {
-        Write-Host "= PREPARE: Initialize the docker compose file '$dockerComposeFile' containing the image definitions."
+        Write-Host "= PREPARE: Generate docker compose file '$dockerComposeFile' containing the $agentType image definitions."
         Initialize-DockerComposeFile -AgentType $AgentType -ImageType $ImageType -DockerComposeFile $dockerComposeFile
     }
 
-    Write-Host '= PREPARE: List of images and tags to be processed:'
-    Invoke-Expression "$baseDockerCmd config"
+    if ($Target -eq 'build') {
+        Write-Host '= PREPARE: List of images and tags to be processed:'
+        Invoke-Expression "$baseDockerCmd config"
 
-    Write-Host '= BUILD: Building all images...'
-    switch ($DryRun) {
-        $true { Write-Host "(dry-run) $baseDockerBuildCmd" }
-        $false { Invoke-Expression $baseDockerBuildCmd }
+        Write-Host '= BUILD: Building all images...'
+        switch ($DryRun) {
+            $true { Write-Host "(dry-run) $baseDockerBuildCmd" }
+            $false { Invoke-Expression $baseDockerBuildCmd }
+        }
+        Write-Host '= BUILD: Finished building all images.'
+
+        if ($lastExitCode -ne 0) {
+            exit $lastExitCode
+        }
     }
-    Write-Host '= BUILD: Finished building all images.'
 
-    if ($lastExitCode -ne 0) {
-        exit $lastExitCode
-    }
-
-    if ($target -eq 'test') {
+    if ($Target -eq 'test') {
         if ($DryRun) {
             Write-Host '= TEST: (dry-run) test harness'
         } else {
@@ -209,14 +214,7 @@ foreach($agentType in $AgentTypes) {
             $mod = Get-InstalledModule -Name Pester -MinimumVersion 5.3.0 -MaximumVersion 5.3.3 -ErrorAction SilentlyContinue
             if ($null -eq $mod) {
                 Write-Host '= TEST: Pester 5.3.x not found: installing...'
-                $module = 'C:\Program Files\WindowsPowerShell\Modules\Pester'
-                if (Test-Path $module) {
-                    takeown /F $module /A /R
-                    icacls $module /reset
-                    icacls $module /grant Administrators:'F' /inheritance:d /T
-                    Remove-Item -Path $module -Recurse -Force -Confirm:$false
-                }
-                Install-Module -Force -Name Pester -MaximumVersion 5.3.3
+                Install-Module -Force -Name Pester -MaximumVersion 5.3.3 -Scope CurrentUser
             }
 
             Import-Module Pester
@@ -248,7 +246,7 @@ foreach($agentType in $AgentTypes) {
         }
     }
 
-    if ($target -eq 'publish') {
+    if ($Target -eq 'publish') {
         Write-Host '= PUBLISH: push all images and tags'
         switch($DryRun) {
             $true { Write-Host "(dry-run) $baseDockerCmd push" }

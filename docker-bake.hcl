@@ -1,45 +1,4 @@
-group "linux" {
-  targets = [
-    "alpine",
-    "debian",
-    "rhel_ubi9"
-  ]
-}
-
-group "windows" {
-  targets = [
-    "nanoserver",
-    "windowsservercore"
-  ]
-}
-
-group "linux-arm64" {
-  targets = [
-    "alpine_jdk21",
-    "debian",
-    "rhel_ubi9"
-  ]
-}
-
-group "linux-arm32" {
-  targets = [
-    "debian_jdk17"
-  ]
-}
-
-group "linux-s390x" {
-  targets = [
-    "debian_jdk21"
-  ]
-}
-
-group "linux-ppc64le" {
-  targets = [
-    "debian",
-    "rhel_ubi9"
-  ]
-}
-
+## Variables
 variable "agent_types_to_build" {
   default = ["agent", "inbound-agent"]
 }
@@ -47,35 +6,28 @@ variable "agent_types_to_build" {
 variable "jdks_to_build" {
   default = [17, 21, 25]
 }
-
-# This is a temporary modification to support JDK 25 on Linux only. It will be removed in a future pull request
-# dedicated to adding JDK 25 support for Windows.
-variable "windows_jdks_to_build" {
-  default = [17, 21]
-}
-
 variable "default_jdk" {
-  default = 17
+  default = 21
 }
 
 variable "jdks_in_preview" {
-  default = [25]
+  default = []
 }
 
 variable "JAVA17_VERSION" {
-  default = "17.0.16_8"
+  default = "17.0.18_8"
 }
 
 variable "JAVA21_VERSION" {
-  default = "21.0.8_9"
+  default = "21.0.10_7"
 }
 
 variable "JAVA25_VERSION" {
-  default = "25+9-ea-beta"
+  default = "25.0.2_10"
 }
 
 variable "REMOTING_VERSION" {
-  default = "3341.v0766d82b_dec0"
+  default = "3355.v388858a_47b_33"
 }
 
 variable "REGISTRY" {
@@ -103,7 +55,7 @@ variable "ON_TAG" {
 }
 
 variable "ALPINE_FULL_TAG" {
-  default = "3.22.1"
+  default = "3.23.3"
 }
 
 variable "ALPINE_SHORT_TAG" {
@@ -111,11 +63,11 @@ variable "ALPINE_SHORT_TAG" {
 }
 
 variable "DEBIAN_RELEASE" {
-  default = "bookworm-20250908"
+  default = "trixie-20260223"
 }
 
 variable "UBI9_TAG" {
-  default = "9.6-1758184894"
+  default = "9.7-1771346757"
 }
 
 # Set this value to a specific Windows version to override Windows versions to build returned by windowsversions function
@@ -136,151 +88,7 @@ variable "jdk_versions" {
   }
 }
 
-## Common functions
-# Return the registry organization and repository depending on the agent type
-function "orgrepo" {
-  params = [agentType]
-  result = equal("agent", agentType) ? "${REGISTRY_ORG}/${REGISTRY_REPO_AGENT}" : "${REGISTRY_ORG}/${REGISTRY_REPO_INBOUND_AGENT}"
-}
-
-# Return "true" if the jdk passed as parameter is the same as the default jdk, "false" otherwise
-function "is_default_jdk" {
-  params = [jdk]
-  result = equal(default_jdk, jdk) ? true : false
-}
-
-# Return the complete Java version corresponding to the jdk passed as parameter
-function "javaversion" {
-  params = [jdk]
-  result = lookup(jdk_versions, jdk, "Unsupported JDK version")
-}
-
-## Specific functions
-# Return an array of Alpine platforms to use depending on the jdk passed as parameter
-function "alpine_platforms" {
-  params = [jdk]
-  result = (equal(17, jdk)
-    ? ["linux/amd64"]
-  : ["linux/amd64", "linux/arm64"])
-}
-
-# Return an array of Debian platforms to use depending on the jdk passed as parameter
-function "debian_platforms" {
-  params = [jdk]
-  result = (equal(17, jdk)
-    ? ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/arm/v7"]
-  : ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/s390x"])
-}
-
-# Return array of Windows version(s) to build
-# There is no mcr.microsoft.com/windows/servercore:1809 image
-# Can be overriden by setting WINDOWS_VERSION_OVERRIDE to a specific Windows version
-# Ex: WINDOWS_VERSION_OVERRIDE=1809 docker buildx bake windows
-function "windowsversions" {
-  params = [flavor]
-  result = (notequal(WINDOWS_VERSION_OVERRIDE, "")
-    ? [WINDOWS_VERSION_OVERRIDE]
-    : (equal(flavor, "windowsservercore")
-      ? ["ltsc2019", "ltsc2022"]
-  : ["1809", "ltsc2019", "ltsc2022"]))
-}
-
-# Return array of agent type(s) to build
-# Can be overriden to a specific agent type
-function "windowsagenttypes" {
-  params = [override]
-  result = (notequal(override, "")
-    ? [override]
-  : agent_types_to_build)
-}
-
-# Return the Windows version to use as base image for the Windows version passed as parameter
-# There is no mcr.microsoft.com/powershell ltsc2019 base image, using a "1809" instead
-function "toolsversion" {
-  params = [version]
-  result = (equal("ltsc2019", version)
-    ? "1809"
-  : version)
-}
-
-# Return an array of RHEL UBI 9 platforms to use depending on the jdk passed as parameter
-# Note: Jenkins controller container image only supports jdk17 and jdk21 for ubi9
-function "rhel_ubi9_platforms" {
-  params = [jdk]
-  result = ["linux/amd64", "linux/arm64", "linux/ppc64le"]
-}
-
-# Return the distribution followed by a dash if it is not the default distribution
-function distribution_prefix {
-  params = [distribution]
-  result = (equal("debian", distribution)
-    ? ""
-  : "${distribution}-")
-}
-
-# Return a dash followed by the distribution if it is not the default distribution
-function distribution_suffix {
-  params = [distribution]
-  result = (equal("debian", distribution)
-    ? ""
-  : "-${distribution}")
-}
-
-# Return the official name of the default distribution
-function distribution_name {
-  params = [distribution]
-  result = (equal("debian", distribution)
-    ? "bookworm"
-  : distribution)
-}
-
-# Return the tag suffixed by "-preview" if the jdk passed as parameter is in the jdks_in_preview list
-function preview_tag {
-  params = [jdk]
-  result = (contains(jdks_in_preview, jdk)
-    ? "${jdk}-preview"
-  : jdk)
-}
-
-# Return an array of tags depending on the agent type, the jdk and the Linux distribution passed as parameters
-function "linux_tags" {
-  params = [type, jdk, distribution]
-  result = [
-    ## All
-    # If there is a tag, add versioned tag suffixed by the jdk
-    equal(ON_TAG, "true") ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}${distribution_suffix(distribution)}-jdk${preview_tag(jdk)}" : "",
-
-    # If there is a tag and if the jdk is the default one, add versioned short tag
-    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}${distribution_suffix(distribution)}" : "") : "",
-
-    # If the jdk is the default one, add distribution and latest short tags
-    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${distribution_name(distribution)}" : "",
-    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:latest${distribution_suffix(distribution)}" : "",
-    # Needed for the ":latest-bookworm" case. For other distributions, result in the same tag as above (not an issue, deduplicated at the end)
-    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:latest-${distribution_name(distribution)}" : "",
-
-    # Tags always added
-    "${REGISTRY}/${orgrepo(type)}:${distribution_name(distribution)}-jdk${preview_tag(jdk)}",
-    "${REGISTRY}/${orgrepo(type)}:latest-${distribution_name(distribution)}-jdk${preview_tag(jdk)}",
-    # ":jdkN" and ":latest-jdkN" short tags for the default distribution. For other distributions, result in the tags above (not an issue, deduplicated at the end)
-    "${REGISTRY}/${orgrepo(type)}:${distribution_prefix(distribution)}jdk${preview_tag(jdk)}",
-    "${REGISTRY}/${orgrepo(type)}:latest-${distribution_prefix(distribution)}jdk${preview_tag(jdk)}",
-  ]
-}
-
-# Return an array of tags depending on the agent type, the jdk and the flavor and version of Windows passed as parameters
-function "windows_tags" {
-  params = [type, jdk, flavor_and_version]
-  result = [
-    # If there is a tag, add versioned tag containing the jdk
-    equal(ON_TAG, "true") ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-jdk${preview_tag(jdk)}-${flavor_and_version}" : "",
-    # If there is a tag and if the jdk is the default one, add versioned and short tags
-    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-${flavor_and_version}" : "") : "",
-    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${flavor_and_version}" : "") : "",
-    "${REGISTRY}/${orgrepo(type)}:jdk${preview_tag(jdk)}-${flavor_and_version}",
-  ]
-}
-
+## Targets
 target "alpine" {
   matrix = {
     type = agent_types_to_build
@@ -337,10 +145,8 @@ target "rhel_ubi9" {
 
 target "nanoserver" {
   matrix = {
-    type = windowsagenttypes(WINDOWS_AGENT_TYPE_OVERRIDE)
-    # This is a temporary modification to support JDK 25 on Linux only. It will be removed in a future pull request
-    # dedicated to adding JDK 25 support for Windows.
-    jdk             = windows_jdks_to_build
+    type            = windowsagenttypes(WINDOWS_AGENT_TYPE_OVERRIDE)
+    jdk             = jdks_to_build
     windows_version = windowsversions("nanoserver")
   }
   name       = "${type}_nanoserver-${windows_version}_jdk${jdk}"
@@ -360,10 +166,8 @@ target "nanoserver" {
 
 target "windowsservercore" {
   matrix = {
-    type = windowsagenttypes(WINDOWS_AGENT_TYPE_OVERRIDE)
-    # This is a temporary modification to support JDK 25 on Linux only. It will be removed in a future pull request
-    # dedicated to adding JDK 25 support for Windows.
-    jdk             = windows_jdks_to_build
+    type            = windowsagenttypes(WINDOWS_AGENT_TYPE_OVERRIDE)
+    jdk             = jdks_to_build
     windows_version = windowsversions("windowsservercore")
   }
   name       = "${type}_windowsservercore-${windows_version}_jdk${jdk}"
@@ -379,4 +183,169 @@ target "windowsservercore" {
   target    = type
   tags      = windows_tags(type, jdk, "windowsservercore-${windows_version}")
   platforms = ["windows/amd64"]
+}
+
+## Groups
+group "linux" {
+  targets = [
+    "alpine",
+    "debian",
+    "rhel_ubi9"
+  ]
+}
+
+group "windows" {
+  targets = [
+    "nanoserver",
+    "windowsservercore"
+  ]
+}
+
+group "all" {
+  targets = [
+    "linux",
+    "windows",
+  ]
+}
+
+## Common functions
+# Return the registry organization and repository depending on the agent type
+function "orgrepo" {
+  params = [agentType]
+  result = equal("agent", agentType) ? "${REGISTRY_ORG}/${REGISTRY_REPO_AGENT}" : "${REGISTRY_ORG}/${REGISTRY_REPO_INBOUND_AGENT}"
+}
+
+# Return "true" if the jdk passed as parameter is the same as the default jdk, "false" otherwise
+function "is_default_jdk" {
+  params = [jdk]
+  result = equal(default_jdk, jdk) ? true : false
+}
+
+# Return the complete Java version corresponding to the jdk passed as parameter
+function "javaversion" {
+  params = [jdk]
+  result = lookup(jdk_versions, jdk, "Unsupported JDK version")
+}
+
+## Specific functions
+# Return an array of Alpine platforms to use depending on the jdk passed as parameter
+function "alpine_platforms" {
+  params = [jdk]
+  result = (equal(17, jdk)
+    ? ["linux/amd64"]
+  : ["linux/amd64", "linux/arm64"])
+}
+
+# Return an array of Debian platforms to use depending on the jdk passed as parameter
+function "debian_platforms" {
+  params = [jdk]
+  result = (equal(17, jdk)
+    ? ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/arm/v7"]
+  : ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/s390x"])
+}
+
+# Return array of Windows version(s) to build
+# Can be overriden by setting WINDOWS_VERSION_OVERRIDE to a specific Windows version
+# Ex: WINDOWS_VERSION_OVERRIDE=ltsc2025 docker buildx bake windows
+function "windowsversions" {
+  params = [flavor]
+  result = (notequal(WINDOWS_VERSION_OVERRIDE, "")
+    ? [WINDOWS_VERSION_OVERRIDE]
+  : ["ltsc2019", "ltsc2022"])
+}
+
+# Return array of agent type(s) to build
+# Can be overriden to a specific agent type
+function "windowsagenttypes" {
+  params = [override]
+  result = (notequal(override, "")
+    ? [override]
+  : agent_types_to_build)
+}
+
+# Return the Windows version to use as base image for the Windows version passed as parameter
+# There is no mcr.microsoft.com/powershell ltsc2019 base image, using a "1809" instead
+function "toolsversion" {
+  params = [version]
+  result = (equal("ltsc2019", version)
+    ? "1809"
+  : version)
+}
+
+# Return an array of RHEL UBI 9 platforms to use depending on the jdk passed as parameter
+# Note: Jenkins controller container image only supports jdk17 and jdk21 for ubi9
+function "rhel_ubi9_platforms" {
+  params = [jdk]
+  result = ["linux/amd64", "linux/arm64", "linux/ppc64le"]
+}
+
+# Return the distribution followed by a dash if it is not the default distribution
+function distribution_prefix {
+  params = [distribution]
+  result = (equal("debian", distribution)
+    ? ""
+  : "${distribution}-")
+}
+
+# Return a dash followed by the distribution if it is not the default distribution
+function distribution_suffix {
+  params = [distribution]
+  result = (equal("debian", distribution)
+    ? ""
+  : "-${distribution}")
+}
+
+# Return the official name of the default distribution
+function distribution_name {
+  params = [distribution]
+  result = (equal("debian", distribution)
+    ? "trixie"
+  : distribution)
+}
+
+# Return the tag suffixed by "-preview" if the jdk passed as parameter is in the jdks_in_preview list
+function preview_tag {
+  params = [jdk]
+  result = (contains(jdks_in_preview, jdk)
+    ? "${jdk}-preview"
+  : jdk)
+}
+
+# Return an array of tags depending on the agent type, the jdk and the Linux distribution passed as parameters
+function "linux_tags" {
+  params = [type, jdk, distribution]
+  result = [
+    ## All
+    # If there is a tag, add versioned tag suffixed by the jdk
+    equal(ON_TAG, "true") ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}${distribution_suffix(distribution)}-jdk${preview_tag(jdk)}" : "",
+
+    # If there is a tag and if the jdk is the default one, add versioned short tag
+    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}${distribution_suffix(distribution)}" : "") : "",
+
+    # If the jdk is the default one, add distribution and latest short tags
+    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${distribution_name(distribution)}" : "",
+    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:latest${distribution_suffix(distribution)}" : "",
+    # Needed for the ":latest-trixie" case. For other distributions, result in the same tag as above (not an issue, deduplicated at the end)
+    is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:latest-${distribution_name(distribution)}" : "",
+
+    # Tags always added
+    "${REGISTRY}/${orgrepo(type)}:${distribution_name(distribution)}-jdk${preview_tag(jdk)}",
+    "${REGISTRY}/${orgrepo(type)}:latest-${distribution_name(distribution)}-jdk${preview_tag(jdk)}",
+    # ":jdkN" and ":latest-jdkN" short tags for the default distribution. For other distributions, result in the tags above (not an issue, deduplicated at the end)
+    "${REGISTRY}/${orgrepo(type)}:${distribution_prefix(distribution)}jdk${preview_tag(jdk)}",
+    "${REGISTRY}/${orgrepo(type)}:latest-${distribution_prefix(distribution)}jdk${preview_tag(jdk)}",
+  ]
+}
+
+# Return an array of tags depending on the agent type, the jdk and the flavor and version of Windows passed as parameters
+function "windows_tags" {
+  params = [type, jdk, flavor_and_version]
+  result = [
+    # If there is a tag, add versioned tag containing the jdk
+    equal(ON_TAG, "true") ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-jdk${preview_tag(jdk)}-${flavor_and_version}" : "",
+    # If there is a tag and if the jdk is the default one, add versioned and short tags
+    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${REMOTING_VERSION}-${BUILD_NUMBER}-${flavor_and_version}" : "") : "",
+    equal(ON_TAG, "true") ? (is_default_jdk(jdk) ? "${REGISTRY}/${orgrepo(type)}:${flavor_and_version}" : "") : "",
+    "${REGISTRY}/${orgrepo(type)}:jdk${preview_tag(jdk)}-${flavor_and_version}",
+  ]
 }
