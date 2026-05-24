@@ -15,15 +15,15 @@ variable "jdks_in_preview" {
 }
 
 variable "JAVA17_VERSION" {
-  default = "17.0.18_8"
+  default = "17.0.19_10"
 }
 
 variable "JAVA21_VERSION" {
-  default = "21.0.10_7"
+  default = "21.0.11_10"
 }
 
 variable "JAVA25_VERSION" {
-  default = "25.0.2_10"
+  default = "25.0.3_9"
 }
 
 variable "REMOTING_VERSION" {
@@ -55,7 +55,7 @@ variable "ON_TAG" {
 }
 
 variable "ALPINE_FULL_TAG" {
-  default = "3.23.3"
+  default = "3.23.4"
 }
 
 variable "ALPINE_SHORT_TAG" {
@@ -63,11 +63,11 @@ variable "ALPINE_SHORT_TAG" {
 }
 
 variable "DEBIAN_RELEASE" {
-  default = "trixie-20260223"
+  default = "trixie-20260518"
 }
 
 variable "UBI9_TAG" {
-  default = "9.7-1771346757"
+  default = "9.8-1779374378"
 }
 
 # Set this value to a specific Windows version to override Windows versions to build returned by windowsversions function
@@ -240,8 +240,8 @@ function "alpine_platforms" {
 function "debian_platforms" {
   params = [jdk]
   result = (equal(17, jdk)
-    ? ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/arm/v7"]
-  : ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/s390x"])
+    ? ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/arm/v7", "linux/riscv64"]
+  : ["linux/amd64", "linux/arm64", "linux/ppc64le", "linux/s390x", "linux/riscv64"])
 }
 
 # Return array of Windows version(s) to build
